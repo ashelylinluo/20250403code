@@ -1,10 +1,11 @@
 ## ============================================================================
-## CfWRKY ggmsa 窗口图（最终可运行版）
+## CfWRKY ggmsa 窗口图（一次性输出三组；显示左侧ID；无保守性标记）
 ## ============================================================================
 options(warn = 1); options(bitmapType = "cairo")
 suppressPackageStartupMessages({
   library(Biostrings); library(ggplot2); library(dplyr); library(readr)
   library(ggmsa); library(systemfonts)
+  library(showtext)
 })
 
 ## ----------------- 路径与参数 -----------------
@@ -13,13 +14,28 @@ in_map  <- "/wrk/luolin/wrky_family/CfWRKY_group_map.csv"
 out_dir <- "/wrk/luolin/wrky_family/bidui_pub/"
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-group_key <- "I"        # 画 I / II / III
-palette   <- "Clustal"  # 或 "Taylor"
-use_ticks <- TRUE
+palette      <- "Clustal"      # "Clustal"/"Taylor"
+use_ticks    <- TRUE
+tick_by      <- 20
+tick_mode    <- "real"         # "real" | "custom"
+custom_start <- 1
+dpi_export   <- 600
 
-## 刻度显示模式（改这里！）
-tick_mode <- "real"      # "real" = 真实位置 | "custom" = 自定义
-custom_start <- 1        # tick_mode="custom" 时生效
+## ------- 字体（可按需替换） -------
+pick_font <- function() {
+  avail <- unique(systemfonts::system_fonts()$family)
+  monos <- c("JetBrains Mono","Fira Code","Consolas","DejaVu Sans Mono",
+             "Noto Sans Mono CJK SC","Noto Sans Mono","Courier New")
+  cjk   <- c("Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",
+             "SimHei","SimSun","PingFang SC","Heiti SC")
+  common<- c("Arial","DejaVu Sans","Liberation Sans")
+  if (any(monos %in% avail)) return(monos[monos %in% avail][1])
+  if (any(cjk   %in% avail)) return(cjk[cjk %in% avail][1])
+  if (any(common %in% avail)) return(common[common %in% avail][1])
+  "sans"
+}
+base_family <- pick_font()
+showtext_auto(TRUE); showtext_opts(dpi = dpi_export)
 
 ## ----------------- 工具函数 -----------------
 norm_id <- function(x){
@@ -27,7 +43,6 @@ norm_id <- function(x){
   x <- sub("^>", "", x); x <- sub("\\s.*$", "", x); x <- sub("\\|.*$", "", x)
   gsub("[\u200B-\u200D\uFEFF]", "", x)
 }
-
 normalize_group_major <- function(x){
   x <- as.character(x); x <- trimws(x)
   x <- gsub("^group\\s*", "", x, ignore.case=TRUE)
@@ -36,7 +51,6 @@ normalize_group_major <- function(x){
   x <- toupper(x)
   sub("^(I{1,3}).*$","\\1", x)
 }
-
 auto_wrky_window <- function(aa_set, motif="WRKYG[QK]K", flank=30){
   seqs <- sapply(aa_set, as.character)
   M <- do.call(rbind, strsplit(seqs,""))
@@ -57,16 +71,12 @@ aa_all <- readAAStringSet(in_msa)
 names(aa_all) <- norm_id(names(aa_all))
 ann_raw <- read_csv(in_map, show_col_types = FALSE)
 
-# 自动识别列名
 cn <- tolower(names(ann_raw))
 name_candidates  <- c("newname","name","id","gene","seq","seqid")
 group_candidates <- c("group","classification","class","subgroup","family","cluster")
 new_col <- names(ann_raw)[match(name_candidates,  cn, nomatch = 0)][1]
 grp_col <- names(ann_raw)[match(group_candidates, cn, nomatch = 0)][1]
-
-if (is.na(new_col) || is.na(grp_col)) {
-  stop("CSV里没找到名称列/分组列")
-}
+if (is.na(new_col) || is.na(grp_col)) stop("CSV里没找到名称列/分组列")
 
 ann <- ann_raw %>%
   transmute(Newname = .data[[new_col]], Group = .data[[grp_col]]) %>%
@@ -76,94 +86,86 @@ ann <- ann_raw %>%
 cat("分组统计:\n")
 print(table(ann$Group_major, useNA = "ifany"))
 
-## ----------------- 定位窗口 -----------------
+## ----------------- 统一窗口 -----------------
 win <- auto_wrky_window(aa_all, flank = 30)
 cat(sprintf("窗口: %d-%d (长度=%d)\n", win["start"], win["end"], win["end"]-win["start"]+1))
 
-## ----------------- 筛选目标组 -----------------
-ids <- ann %>% filter(Group_major == group_key) %>% pull(Newname_norm) %>% unique()
-hit_idx <- match(ids, names(aa_all))
-hit_idx <- hit_idx[!is.na(hit_idx)]
-if(length(hit_idx) == 0) stop(sprintf("Group %s 没有匹配到序列", group_key))
+## ----------------- 绘图函数（单组） -----------------
+plot_group <- function(group_key){
+  ids <- ann %>% filter(Group_major == group_key) %>% pull(Newname_norm) %>% unique()
+  hit_idx <- match(ids, names(aa_all)); hit_idx <- hit_idx[!is.na(hit_idx)]
+  if (!length(hit_idx)) { warning(sprintf("Group %s 无匹配序列", group_key)); return(NULL) }
 
-sub <- aa_all[hit_idx]
-names(sub) <- make.unique(names(sub), sep = "_dup")
-n_seq <- length(sub)
-id_lab <- names(sub)
-cat(sprintf("Group %s: %d 条序列\n", group_key, n_seq))
+  sub <- aa_all[hit_idx]
+  names(sub) <- make.unique(names(sub), sep = "_dup")
+  n_seq <- length(sub)
+  cat(sprintf("Group %s: %d 条序列\n", group_key, n_seq))
 
-## ----------------- 绘图 -----------------
-base_family <- {
-  fonts <- system_fonts()$family
-  if ("Arial" %in% fonts) "Arial"
-  else if ("DejaVu Sans" %in% fonts) "DejaVu Sans"
-  else "sans"
-}
+  p <- ggmsa(sub,
+             start = win["start"], end = win["end"],
+             color = palette,
+             seq_name = TRUE,        # 交给 ggmsa 显示左侧 ID
+             consensus_views = FALSE,
+             use_dot = FALSE,
+             none_bg = FALSE,
+             char_width = 0.9)
 
-p <- ggmsa(sub,
-           start = win["start"], end = win["end"],
-           color = palette,
-           seq_name = FALSE,
-           consensus_views = TRUE,
-           use_dot = FALSE,
-           none_bg = FALSE,
-           char_width = 0.9) +
-  geom_msaBar() +
-  coord_cartesian(clip = "off") +
-  theme_classic(base_size = 10) +
-  theme(panel.grid = element_blank(),
-        axis.title = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks  = element_blank(),
-        plot.margin = margin(6, 10, 6, 150, "pt"),
-        text = element_text(family = base_family))
+  p <- p +
+    coord_cartesian(clip = "off") +
+    theme_classic(base_size = 10, base_family = base_family) +
+    theme(
+      axis.title   = element_blank(),
+      # 不要隐藏 y 轴文字！这就是左侧 ID：
+      axis.text.y  = element_text(size = 7, family = base_family, hjust = 1),
+      axis.ticks.y = element_blank(),
+      panel.grid   = element_blank(),
+      # 左边距留足，让长 ID 不被切掉
+      plot.margin  = margin(10, 10, 10, 120, "pt")
+    )
 
-# 左侧序列名
-p <- p + geom_text(
-  data = data.frame(y = seq_len(n_seq), id = id_lab),
-  aes(x = win["start"] - 2, y = y, label = id),
-  inherit.aes = FALSE, hjust = 1, size = 3, family = base_family
-)
-
-# 刻度标签
-if (use_ticks) {
-  tick_breaks <- seq(win["start"], win["end"], by = 20)
-  
-  if (tick_mode == "real") {
-    tick_labels <- tick_breaks
-    cat(sprintf("刻度: 真实位置 (%d-%d)\n", min(tick_breaks), max(tick_breaks)))
-  } else if (tick_mode == "custom") {
-    offset <- custom_start - win["start"]
-    tick_labels <- tick_breaks + offset
-    cat(sprintf("刻度: 自定义编号 (%d-%d)\n", min(tick_labels), max(tick_labels)))
+  if (use_ticks) {
+    tick_breaks <- seq(win["start"], win["end"], by = tick_by)
+    tick_labels <- if (tick_mode == "real") tick_breaks else tick_breaks + (custom_start - win["start"])
+    p <- p + scale_x_continuous(breaks = tick_breaks, labels = tick_labels)
+  } else {
+    p <- p + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
   }
-  
-  p <- p + scale_x_continuous(breaks = tick_breaks, labels = tick_labels)
+
+  # 高亮 WRKYG[QK]K（在组内共识上定位）
+  cons_str <- {
+    seqs <- sapply(sub, as.character)
+    M <- do.call(rbind, strsplit(seqs,""))
+    cons <- apply(M,2,function(col){
+      tab <- sort(table(col[col!="-"]),decreasing=TRUE)
+      if(!length(tab)) "-" else names(tab)[1]
+    })
+    paste(cons, collapse="")
+  }
+  rel_hit <- regexpr("WRKYG[QK]K", substring(cons_str, win["start"], win["end"]), perl=TRUE)
+  if (rel_hit > 0){
+    x1 <- win["start"] + as.integer(rel_hit) - 1 + 0.5
+    x2 <- x1 + attr(rel_hit,"match.length") - 1
+    p <- p + annotate("rect", xmin = x1 - 0.5, xmax = x2 + 0.5,
+                      ymin = -Inf, ymax = Inf, alpha = 0.08)
+  }
+
+  list(plot = p, n_seq = n_seq)
 }
 
-# 高亮 WRKY motif
-cons_str <- {
-  seqs <- sapply(sub, as.character)
-  M <- do.call(rbind, strsplit(seqs,""))
-  cons <- apply(M,2,function(col){
-    tab <- sort(table(col[col!="-"]),decreasing=TRUE)
-    if(!length(tab)) "-" else names(tab)[1]
-  })
-  paste(cons, collapse="")
+## ----------------- 批量输出三组（自动高度） -----------------
+for (gk in c("I","II","III")) {
+  res <- plot_group(gk)
+  if (is.null(res)) next
+  p <- res$plot; n_seq <- res$n_seq
+
+  # 高度随行数自适应
+  height_cm <- max(12, 0.26 * n_seq + 4)
+
+  png_file <- file.path(out_dir, sprintf("CfWRKY_Group%s_MSA_window.png", gk))
+  pdf_file <- file.path(out_dir, sprintf("CfWRKY_Group%s_MSA_window.pdf", gk))
+  ggsave(png_file, p, width = 24, height = height_cm, units = "cm", dpi = dpi_export, bg = "white")
+  ggsave(pdf_file, p, width = 24, height = height_cm, units = "cm", dpi = dpi_export, bg = "white")
+  cat(sprintf("✓ 已导出 Group %s（高度 %.1f cm）：\n  %s\n  %s\n", gk, height_cm, png_file, pdf_file))
 }
 
-rel_hit <- regexpr("WRKYG[QK]K", substring(cons_str, win["start"], win["end"]), perl=TRUE)
-if (rel_hit > 0){
-  x1 <- win["start"] + as.integer(rel_hit) - 0.5
-  x2 <- x1 + attr(rel_hit,"match.length")
-  p  <- p + annotate("rect", xmin = x1, xmax = x2 + 0.5, ymin = -Inf, ymax = Inf, alpha = 0.08)
-}
-
-## ----------------- 保存 -----------------
-png_file <- file.path(out_dir, sprintf("CfWRKY_Group%s_MSA_window.png", group_key))
-pdf_file <- file.path(out_dir, sprintf("CfWRKY_Group%s_MSA_window.pdf", group_key))
-
-ggsave(png_file, p, width = 22, height = 12, units = "cm", dpi = 600, bg = "white")
-ggsave(pdf_file, p, width = 22, height = 12, units = "cm", dpi = 600, bg = "white")
-
-cat(sprintf("\n✓ 完成！\n  %s\n  %s\n", png_file, pdf_file))
+cat("\n全部完成！\n")
