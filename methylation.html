@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DNA Methylation Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            margin: 40px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            text-align: left;
+            min-width: 800px;
+            max-width: 1100px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        label {
+            display: inline-block;
+            margin-right: 8px;
+            margin-bottom: 5px;
+        }
+        input, select {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 7px 16px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            background-color: #228B22;
+            color: #fff;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #20B2AA;
+        }
+        table {
+            width: 100%;
+            margin-top: 15px;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            font-size: 13px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        #errorMessage {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>DNA Methylation Search</h1>
+
+    <div style="margin-bottom: 10px;">
+        <label for="context">Context:</label>
+        <select id="context">
+            <option value="CG">CG</option>
+            <option value="CHG">CHG</option>
+            <option value="CHH">CHH</option>
+        </select>
+    </div>
+
+    <div style="margin-bottom: 10px;">
+        <label for="geneId">Gene ID:</label>
+        <input type="text" id="geneId" placeholder="e.g. Pgi01A00000020" style="width:200px;">
+        <button onclick="searchGeneMethylation()">Search Gene</button>
+        <button onclick="fillExampleGene()">Example Gene</button>
+    </div>
+
+    <div style="margin-bottom: 10px;">
+        <label for="chr">Chromosome:</label>
+        <input type="text" id="chr" placeholder="e.g. Chr05A" style="width:120px;">
+
+        <label for="start">Start:</label>
+        <input type="number" id="start" style="width:150px;">
+
+        <label for="end">End:</label>
+        <input type="number" id="end" style="width:150px;">
+
+        <button onclick="searchMethylation()">Search</button>
+        <button onclick="fillExample()">Example</button>
+    </div>
+
+    <div id="errorMessage"></div>
+    <div id="results"></div>
+</div>
+
+<script>
+    function clearErrorAndResults() {
+        const err = document.getElementById('errorMessage');
+        const resultsDiv = document.getElementById('results');
+        if (err) {
+            err.style.display = 'none';
+            err.textContent = '';
+        }
+        if (resultsDiv) {
+            resultsDiv.innerHTML = '';
+        }
+    }
+
+    function fillExample() {
+        document.getElementById('chr').value = 'Chr05A';
+        document.getElementById('start').value = '6000';
+        document.getElementById('end').value = '11000';
+        clearErrorAndResults();
+    }
+
+    function generateTable(data, headers) {
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+
+        const headerRow = document.createElement('tr');
+        headers.forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            headers.forEach(h => {
+                const td = document.createElement('td');
+                td.textContent = row[h] != null ? row[h] : "";
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        return table;
+    }
+
+    async function searchMethylation() {
+        const chr = document.getElementById('chr').value.trim();
+        const start = document.getElementById('start').value.trim();
+        const end = document.getElementById('end').value.trim();
+        const context = document.getElementById('context').value;
+
+        const err = document.getElementById('errorMessage');
+        const resultsDiv = document.getElementById('results');
+
+        clearErrorAndResults();
+
+        if (!chr || !start || !end) {
+            err.textContent = "Please input chromosome, start and end.";
+            err.style.display = 'block';
+            return;
+        }
+
+        try {
+            const url = `/search_methylation?chr=${encodeURIComponent(chr)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&context=${encodeURIComponent(context)}`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+
+            if (!resp.ok || data.error) {
+                err.textContent = "Error: " + (data.error || `HTTP ${resp.status}`);
+                err.style.display = 'block';
+                return;
+            }
+
+            if (!data.length) {
+                resultsDiv.innerHTML = "<p>No methylation records in this region.</p>";
+                return;
+            }
+
+            const headers = ["chr", "start", "end", "strand", "context", "Leaf", "Root"];
+            const table = generateTable(data, headers);
+            resultsDiv.appendChild(table);
+
+        } catch (e) {
+            err.textContent = "Error: " + e.message;
+            err.style.display = 'block';
+        }
+    }
+
+    function fillExampleGene() {
+        document.getElementById('geneId').value = 'Pgi01A00000020'; // 示例基因 ID
+        clearErrorAndResults();
+    }
+
+    // 基因 ID -> 查询甲基化
+    async function searchGeneMethylation() {
+        const geneId = document.getElementById('geneId').value.trim();
+        const context = document.getElementById('context').value;
+        const err = document.getElementById('errorMessage');
+        const resultsDiv = document.getElementById('results');
+
+        clearErrorAndResults();
+
+        if (!geneId) {
+            err.textContent = "Please input a Gene ID.";
+            err.style.display = 'block';
+            return;
+        }
+
+        try {
+            const url = `/search_gene_methylation?gene_id=${encodeURIComponent(geneId)}&context=${encodeURIComponent(context)}`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+
+            if (!resp.ok || data.error) {
+                err.textContent = "Error: " + (data.error || `HTTP ${resp.status}`);
+                err.style.display = 'block';
+                return;
+            }
+
+            const g = data.gene_info;
+            if (!g) {
+                err.textContent = "No gene information found for this Gene ID.";
+                err.style.display = 'block';
+                return;
+            }
+
+            // ---- Gene info 部分 ----
+            const geneTableHeaders = ["Gene ID", "Description", "Chromosome", "Start", "End"];
+            const geneTable = document.createElement('table');
+            const thead = document.createElement('thead');
+            const trHead = document.createElement('tr');
+            geneTableHeaders.forEach(h => {
+                const th = document.createElement('th');
+                th.textContent = h;
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            const tbody = document.createElement('tbody');
+            const tr = document.createElement('tr');
+            [g.gene_id, g.description || "N/A", g.chr, g.start, g.end].forEach(v => {
+                const td = document.createElement('td');
+                td.textContent = v;
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+
+            geneTable.appendChild(thead);
+            geneTable.appendChild(tbody);
+
+            resultsDiv.innerHTML = "";
+
+            const h3Gene = document.createElement('h3');
+            h3Gene.textContent = "Gene Information";
+            resultsDiv.appendChild(h3Gene);
+            resultsDiv.appendChild(geneTable);
+
+            // 把基因区间填回 Chr/Start/End 输入框
+            document.getElementById('chr').value = g.chr;
+            document.getElementById('start').value = g.start;
+            document.getElementById('end').value = g.end;
+
+            // ---- 甲基化窗口部分 ----
+            const windows = data.windows || [];
+
+            const h3Win = document.createElement('h3');
+            h3Win.textContent = "Methylation Windows Overlapping This Gene";
+            resultsDiv.appendChild(h3Win);
+
+            if (!windows.length) {
+                const p = document.createElement('p');
+                p.textContent = "No methylation windows found for this gene region.";
+                resultsDiv.appendChild(p);
+                return;
+            }
+
+            const headers = ["chr", "start", "end", "strand", "context", "Leaf", "Root"];
+            const table = generateTable(windows, headers);
+            resultsDiv.appendChild(table);
+
+        } catch (e) {
+            err.textContent = "Error: " + e.message;
+            err.style.display = 'block';
+        }
+    }
+
+    // 回车键触发：
+    // 焦点在 Gene ID 且有内容 -> 查 Gene
+    // 否则 -> 查区间
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+            const active = document.activeElement;
+            const geneIdInput = document.getElementById('geneId');
+            if (active === geneIdInput && geneIdInput.value.trim()) {
+                searchGeneMethylation();
+            } else {
+                searchMethylation();
+            }
+        }
+    });
+</script>
+</body>
+</html>
