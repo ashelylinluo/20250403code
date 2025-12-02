@@ -111,6 +111,35 @@
         h3 {
             margin-top: 20px;
         }
+                .page-info {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #555;
+        }
+        .pagination {
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .page-number-btn {
+            border: 1px solid #ccc;
+            background: #fff;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .page-number-btn.active {
+            background: #228B22;
+            color: #fff;
+            border-color: #228B22;
+        }
+        .page-number-btn.disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
     </style>
 </head>
 <body>
@@ -165,11 +194,16 @@
     <div id="errorMessage"></div>
     <div id="results"></div>
 
+        <div id="pageInfo" class="page-info hidden"></div>
+
     <div id="pagination" class="pagination hidden">
-        <button onclick="previousPage()">Previous Page</button>
-        <button onclick="nextPage()">Next Page</button>
+        <button id="prevPageBtn" onclick="previousPage()">Previous</button>
+        <span id="pageNumbers"></span>
+        <button id="nextPageBtn" onclick="nextPage()">Next</button>
     </div>
-</div>
+</div> <!-- container 结束 -->
+
+
 
 <script>
     // 分页相关全局变量
@@ -260,9 +294,8 @@
         return container;
     }
 
-    function displayPage() {
+        function displayPage() {
         const resultsDiv = document.getElementById('results');
-        // 删除旧的表格（只删 table-container，不动基因信息表）
         const oldTable = resultsDiv.querySelector('.table-container');
         if (oldTable) {
             resultsDiv.removeChild(oldTable);
@@ -270,6 +303,7 @@
 
         if (!tableData || tableData.length === 0) {
             document.getElementById('pagination').classList.add('hidden');
+            document.getElementById('pageInfo').classList.add('hidden');
             return;
         }
 
@@ -280,15 +314,101 @@
         const table = generateTable(pageData, headers);
         resultsDiv.appendChild(table);
 
+        updatePaginationControls();
+    }
+
+        function updatePaginationControls() {
+        const total = tableData.length;
+        const totalPages = Math.ceil(total / rowsPerPage);
+        const pageInfoDiv = document.getElementById('pageInfo');
         const paginationDiv = document.getElementById('pagination');
-        if (tableData.length > rowsPerPage) {
-            paginationDiv.classList.remove('hidden');
-        } else {
+        const pageNumbersSpan = document.getElementById('pageNumbers');
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+
+        if (total === 0) {
+            pageInfoDiv.classList.add('hidden');
             paginationDiv.classList.add('hidden');
+            return;
+        }
+
+        const startEntry = (currentPage - 1) * rowsPerPage + 1;
+        const endEntry = Math.min(currentPage * rowsPerPage, total);
+        pageInfoDiv.textContent = `Showing ${startEntry} to ${endEntry} of ${total} entries`;
+        pageInfoDiv.classList.remove('hidden');
+        paginationDiv.classList.remove('hidden');
+
+        // Previous / Next 按钮状态
+        if (currentPage === 1) {
+            prevBtn.classList.add('disabled');
+            prevBtn.disabled = true;
+        } else {
+            prevBtn.classList.remove('disabled');
+            prevBtn.disabled = false;
+        }
+
+        if (currentPage === totalPages) {
+            nextBtn.classList.add('disabled');
+            nextBtn.disabled = true;
+        } else {
+            nextBtn.classList.remove('disabled');
+            nextBtn.disabled = false;
+        }
+
+        // 生成数字页码
+        pageNumbersSpan.innerHTML = "";
+
+        function createPageButton(page) {
+            const btn = document.createElement('button');
+            btn.textContent = page;
+            btn.className = 'page-number-btn' + (page === currentPage ? ' active' : '');
+            btn.addEventListener('click', function () {
+                if (page !== currentPage) {
+                    currentPage = page;
+                    displayPage();
+                }
+            });
+            pageNumbersSpan.appendChild(btn);
+        }
+
+        function createEllipsis() {
+            const span = document.createElement('span');
+            span.textContent = '...';
+            pageNumbersSpan.appendChild(span);
+        }
+
+        if (totalPages <= 7) {
+            for (let i = 1; i <= totalPages; i++) {
+                createPageButton(i);
+            }
+        } else {
+            // 总页数多时：1 2 3 ... 15 16 这种格式
+            if (currentPage <= 4) {
+                for (let i = 1; i <= 5; i++) {
+                    createPageButton(i);
+                }
+                createEllipsis();
+                createPageButton(totalPages);
+            } else if (currentPage >= totalPages - 3) {
+                createPageButton(1);
+                createEllipsis();
+                for (let i = totalPages - 4; i <= totalPages; i++) {
+                    createPageButton(i);
+                }
+            } else {
+                createPageButton(1);
+                createEllipsis();
+                for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                    createPageButton(i);
+                }
+                createEllipsis();
+                createPageButton(totalPages);
+            }
         }
     }
 
-    function previousPage() {
+
+        function previousPage() {
         if (currentPage > 1) {
             currentPage--;
             displayPage();
@@ -302,6 +422,7 @@
             displayPage();
         }
     }
+
 
     // 区间搜索
     async function searchMethylation() {
