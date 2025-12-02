@@ -16,27 +16,23 @@ METH_BASE_DIR = r"D:\4four_year\20241203encode\chr_1k_region_csv"
 methylation_mapping = {}
 
 for fname in os.listdir(METH_BASE_DIR):
-    # 只处理甲基化结果文件
     if fname.endswith(".methylationlevel.final.csv"):
-        # 例如 fname = "Chr01A_CG.methylationlevel.final.csv"
-        # 先取去掉后缀的前半部分：Chr01A_CG
+        # 例如 "Chr01A_CG.methylationlevel.final.csv"
         prefix = fname.split(".")[0]          # "Chr01A_CG"
         try:
             chr_name, context = prefix.split("_")  # "Chr01A", "CG/CHG/CHH"
         except ValueError:
-            # 以防万一遇到奇怪文件名，跳过
             continue
 
-        key = f"{chr_name}-{context}"         # 比如 "Chr01A-CG"
+        key = f"{chr_name}-{context}"         # "Chr01A-CG"
         full_path = os.path.join(METH_BASE_DIR, fname)
         methylation_mapping[key] = full_path
 
-# 看看加载了哪些 key（可选调试）
 print("Loaded methylation files:")
 for k, v in methylation_mapping.items():
     print("  ", k, "->", v)
 
-GENE_ANNOTATION_FILE = r"D:\4four_year\result\HM\result\peak_csv_modified\Cenchrus_fungigraminus_new.csv"  # <-- 这里你要填真实路径
+GENE_ANNOTATION_FILE = r"D:\4four_year\result\HM\result\peak_csv_modified\Cenchrus_fungigraminus_new.csv"
 
 @app.after_request
 def after_request(response):
@@ -53,7 +49,7 @@ def home():
 
 
 # ------------------------------
-# 1️⃣ 区间搜索
+# 1️⃣ 区间搜索（保持原样）
 # ------------------------------
 @app.route("/search_methylation")
 def search_methylation():
@@ -95,13 +91,17 @@ def search_methylation():
 
 
 # ------------------------------
-# 2️⃣ 基因搜索
+# 2️⃣ 基因搜索（➕ buffer 逻辑）
 # ------------------------------
 @app.route("/search_gene_methylation")
 def search_gene_methylation():
     try:
         gene_id = request.args.get("gene_id")
         context = request.args.get("context", "CG")
+        # 新增：buffer，单位 bp（前端会传 0/1000/2000/3000）
+        buffer_bp = int(request.args.get("buffer", 0))
+
+        app.logger.info(f"gene methylation query: gene_id={gene_id}, context={context}, buffer={buffer_bp}")
 
         if not gene_id:
             return jsonify({"error": "Missing gene_id parameter"}), 400
@@ -116,9 +116,13 @@ def search_gene_methylation():
             return jsonify({"error": f"Gene ID '{gene_id}' not found"}), 404
 
         gene = gene_row.iloc[0]
-        gene_chr = str(gene["Chromosome"])
+        gene_chr = str(gene["Chromosome"]).strip()
         gene_start = int(gene["Start"])
         gene_end = int(gene["End"])
+
+        # 实际查询的区间 = 基因 ± buffer
+        query_start = max(0, gene_start - buffer_bp)
+        query_end = gene_end + buffer_bp
 
         file_key = f"{gene_chr}-{context}"
         file_path = methylation_mapping.get(file_key)
@@ -130,8 +134,8 @@ def search_gene_methylation():
 
         mask = (
             (df["chr"] == gene_chr) &
-            (df["start"] <= gene_end) &
-            (df["end"] >= gene_start)
+            (df["start"] <= query_end) &
+            (df["end"] >= query_start)
         )
 
         filtered = df[mask].copy().sort_values(by="start")
@@ -141,7 +145,7 @@ def search_gene_methylation():
             "gene_info": {
                 "gene_id": gene_id,
                 "chr": gene_chr,
-                "start": gene_start,
+                "start": gene_start,     # 这里仍然返回原始基因起止位点
                 "end": gene_end,
                 "description": gene.get("Description", "")
             },
