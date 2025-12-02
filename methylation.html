@@ -4,40 +4,66 @@
     <meta charset="UTF-8">
     <title>DNA Methylation Search</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <style>
         body {
             font-family: Arial, sans-serif;
             background-color: #f9f9f9;
-            text-align: center;
             margin: 0;
-            padding: 0;
+            padding: 20px;
         }
         .container {
-            margin: 40px auto;
+            margin: 0 auto;
             padding: 20px;
             background: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            text-align: left;
-            min-width: 800px;
             max-width: 1100px;
         }
         h1 {
-            text-align: center;
+            text-align: left;
             margin-bottom: 20px;
+            font-size: 24px;
         }
-        label {
-            display: inline-block;
-            margin-right: 8px;
-            margin-bottom: 5px;
+        .search-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: #f8f8f8;
         }
-        input, select {
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .input-group label {
+            min-width: 90px;
+        }
+        select, input {
             padding: 6px 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 14px;
-            margin-right: 10px;
-            margin-bottom: 10px;
+        }
+        input[type="text"], input[type="number"] {
+            width: 150px;
+        }
+        select {
+            width: 150px;
+        }
+        .flanking-region {
+            margin: 10px 0;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+        .flanking-region label {
+            margin-right: 18px;
+            cursor: pointer;
         }
         button {
             padding: 7px 16px;
@@ -49,17 +75,22 @@
             font-size: 14px;
         }
         button:hover {
-            background-color: #20B2AA;
+            background-color: #1a6b1a;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 15px;
         }
         table {
             width: 100%;
-            margin-top: 15px;
             border-collapse: collapse;
+            margin-top: 10px;
         }
         th, td {
             border: 1px solid #ddd;
             padding: 6px 8px;
             font-size: 13px;
+            text-align: left;
         }
         th {
             background-color: #f2f2f2;
@@ -67,7 +98,18 @@
         #errorMessage {
             color: red;
             margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
             display: none;
+        }
+        .pagination {
+            margin-top: 10px;
+        }
+        .hidden {
+            display: none;
+        }
+        h3 {
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -75,41 +117,69 @@
 <div class="container">
     <h1>DNA Methylation Search</h1>
 
-    <div style="margin-bottom: 10px;">
-        <label for="context">Context:</label>
-        <select id="context">
-            <option value="CG">CG</option>
-            <option value="CHG">CHG</option>
-            <option value="CHH">CHH</option>
-        </select>
-    </div>
+    <div class="search-section">
+        <!-- Context -->
+        <div class="input-group">
+            <label for="context">Context:</label>
+            <select id="context">
+                <option value="CG">CG</option>
+                <option value="CHG">CHG</option>
+                <option value="CHH">CHH</option>
+            </select>
+        </div>
 
-    <div style="margin-bottom: 10px;">
-        <label for="geneId">Gene ID:</label>
-        <input type="text" id="geneId" placeholder="e.g. Pgi01A00000020" style="width:200px;">
-        <button onclick="searchGeneMethylation()">Search Gene</button>
-        <button onclick="fillExampleGene()">Example Gene</button>
-    </div>
+        <!-- Gene search -->
+        <div class="input-group">
+            <label for="geneId">Gene ID:</label>
+            <input type="text" id="geneId" placeholder="e.g. Pgi01A00000020">
+            <button onclick="searchGeneMethylation()">Search Gene</button>
+            <button onclick="fillExampleGene()">Example</button>
+        </div>
 
-    <div style="margin-bottom: 10px;">
-        <label for="chr">Chromosome:</label>
-        <input type="text" id="chr" placeholder="e.g. Chr05A" style="width:120px;">
+        <!-- Flanking region -->
+        <div class="flanking-region">
+            <span>Flanking Region:</span>
+            <label><input type="radio" name="flankingRegion" value="0" checked> ±0 kb</label>
+            <label><input type="radio" name="flankingRegion" value="1"> ±1 kb</label>
+            <label><input type="radio" name="flankingRegion" value="2"> ±2 kb</label>
+            <label><input type="radio" name="flankingRegion" value="3"> ±3 kb</label>
+        </div>
 
-        <label for="start">Start:</label>
-        <input type="number" id="start" style="width:150px;">
+        <!-- Region search -->
+        <div class="input-group">
+            <label for="chr">Chromosome:</label>
+            <input type="text" id="chr" placeholder="e.g. Chr05A">
+            <label for="start">Start:</label>
+            <input type="number" id="start" placeholder="Start position">
+            <label for="end">End:</label>
+            <input type="number" id="end" placeholder="End position">
+            <button onclick="fillExample()">Example</button>
+        </div>
 
-        <label for="end">End:</label>
-        <input type="number" id="end" style="width:150px;">
-
-        <button onclick="searchMethylation()">Search</button>
-        <button onclick="fillExample()">Example</button>
+        <div class="input-group" style="justify-content:flex-start;">
+            <button onclick="searchMethylation()">Search Region</button>
+            <button id="downloadBtn" class="hidden" onclick="downloadTable()">Download Table</button>
+        </div>
     </div>
 
     <div id="errorMessage"></div>
     <div id="results"></div>
+
+    <div id="pagination" class="pagination hidden">
+        <button onclick="previousPage()">Previous Page</button>
+        <button onclick="nextPage()">Next Page</button>
+    </div>
 </div>
 
 <script>
+    // 分页相关全局变量
+    let currentPage = 1;
+    const rowsPerPage = 10;
+    let tableData = [];
+
+    // 甲基化表头（注意要和后端 CSV 列名一致）
+    const headers = ["chr", "start", "end", "strand", "context", "Leaf", "Root"];
+
     function clearErrorAndResults() {
         const err = document.getElementById('errorMessage');
         const resultsDiv = document.getElementById('results');
@@ -122,6 +192,18 @@
         }
     }
 
+    function getFlankingRegion() {
+        const selected = document.querySelector('input[name="flankingRegion"]:checked');
+        // 转成 bp：0/1/2/3 kb -> 0/1000/2000/3000
+        return selected ? parseInt(selected.value) * 1000 : 0;
+    }
+
+    function updateSearchRange(geneStart, geneEnd) {
+        const buffer = getFlankingRegion();
+        document.getElementById('start').value = Math.max(0, parseInt(geneStart) - buffer);
+        document.getElementById('end').value = parseInt(geneEnd) + buffer;
+    }
+
     function fillExample() {
         document.getElementById('chr').value = 'Chr05A';
         document.getElementById('start').value = '6000';
@@ -129,7 +211,15 @@
         clearErrorAndResults();
     }
 
+    function fillExampleGene() {
+        document.getElementById('geneId').value = 'Pgi01A00000020';
+        clearErrorAndResults();
+    }
+
     function generateTable(data, headers) {
+        const container = document.createElement('div');
+        container.className = 'table-container';
+
         const table = document.createElement('table');
         const thead = document.createElement('thead');
         const tbody = document.createElement('tbody');
@@ -146,7 +236,19 @@
             const tr = document.createElement('tr');
             headers.forEach(h => {
                 const td = document.createElement('td');
-                td.textContent = row[h] != null ? row[h] : "";
+                let value = row[h];
+
+                // 简单数值格式处理（可选）
+                if (typeof value === 'number') {
+                    if (['start', 'end'].includes(h)) {
+                        value = Math.round(value);
+                    } else {
+                        // 例如 Leaf / Root 如果是小数，可以保留 4 位
+                        value = Number(value).toFixed(4);
+                    }
+                }
+
+                td.textContent = value != null ? value : "";
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -154,9 +256,54 @@
 
         table.appendChild(thead);
         table.appendChild(tbody);
-        return table;
+        container.appendChild(table);
+        return container;
     }
 
+    function displayPage() {
+        const resultsDiv = document.getElementById('results');
+        // 删除旧的表格（只删 table-container，不动基因信息表）
+        const oldTable = resultsDiv.querySelector('.table-container');
+        if (oldTable) {
+            resultsDiv.removeChild(oldTable);
+        }
+
+        if (!tableData || tableData.length === 0) {
+            document.getElementById('pagination').classList.add('hidden');
+            return;
+        }
+
+        const startIndex = (currentPage - 1) * rowsPerPage;
+        const endIndex = startIndex + rowsPerPage;
+        const pageData = tableData.slice(startIndex, endIndex);
+
+        const table = generateTable(pageData, headers);
+        resultsDiv.appendChild(table);
+
+        const paginationDiv = document.getElementById('pagination');
+        if (tableData.length > rowsPerPage) {
+            paginationDiv.classList.remove('hidden');
+        } else {
+            paginationDiv.classList.add('hidden');
+        }
+    }
+
+    function previousPage() {
+        if (currentPage > 1) {
+            currentPage--;
+            displayPage();
+        }
+    }
+
+    function nextPage() {
+        const maxPage = Math.ceil(tableData.length / rowsPerPage);
+        if (currentPage < maxPage) {
+            currentPage++;
+            displayPage();
+        }
+    }
+
+    // 区间搜索
     async function searchMethylation() {
         const chr = document.getElementById('chr').value.trim();
         const start = document.getElementById('start').value.trim();
@@ -165,6 +312,7 @@
 
         const err = document.getElementById('errorMessage');
         const resultsDiv = document.getElementById('results');
+        const downloadBtn = document.getElementById('downloadBtn');
 
         clearErrorAndResults();
 
@@ -182,17 +330,25 @@
             if (!resp.ok || data.error) {
                 err.textContent = "Error: " + (data.error || `HTTP ${resp.status}`);
                 err.style.display = 'block';
+                resultsDiv.innerHTML = "";
+                downloadBtn.classList.add('hidden');
+                document.getElementById('pagination').classList.add('hidden');
                 return;
             }
+
+            resultsDiv.innerHTML = "<h3>Region Search Results:</h3>";
 
             if (!data.length) {
-                resultsDiv.innerHTML = "<p>No methylation records in this region.</p>";
+                resultsDiv.innerHTML += "<p>No methylation records in this region.</p>";
+                downloadBtn.classList.add('hidden');
+                document.getElementById('pagination').classList.add('hidden');
                 return;
             }
 
-            const headers = ["chr", "start", "end", "strand", "context", "Leaf", "Root"];
-            const table = generateTable(data, headers);
-            resultsDiv.appendChild(table);
+            tableData = data;
+            currentPage = 1;
+            displayPage();
+            downloadBtn.classList.remove('hidden');
 
         } catch (e) {
             err.textContent = "Error: " + e.message;
@@ -200,17 +356,14 @@
         }
     }
 
-    function fillExampleGene() {
-        document.getElementById('geneId').value = 'Pgi01A00000020'; // 示例基因 ID
-        clearErrorAndResults();
-    }
-
-    // 基因 ID -> 查询甲基化
+    // 基因搜索
     async function searchGeneMethylation() {
         const geneId = document.getElementById('geneId').value.trim();
         const context = document.getElementById('context').value;
+        const buffer = getFlankingRegion();  // 单位已经是 bp
         const err = document.getElementById('errorMessage');
         const resultsDiv = document.getElementById('results');
+        const downloadBtn = document.getElementById('downloadBtn');
 
         clearErrorAndResults();
 
@@ -221,13 +374,16 @@
         }
 
         try {
-            const url = `/search_gene_methylation?gene_id=${encodeURIComponent(geneId)}&context=${encodeURIComponent(context)}`;
+            const url = `/search_gene_methylation?gene_id=${encodeURIComponent(geneId)}&context=${encodeURIComponent(context)}&buffer=${buffer}`;
             const resp = await fetch(url);
             const data = await resp.json();
 
             if (!resp.ok || data.error) {
                 err.textContent = "Error: " + (data.error || `HTTP ${resp.status}`);
                 err.style.display = 'block';
+                resultsDiv.innerHTML = "";
+                downloadBtn.classList.add('hidden');
+                document.getElementById('pagination').classList.add('hidden');
                 return;
             }
 
@@ -238,59 +394,58 @@
                 return;
             }
 
-            // ---- Gene info 部分 ----
-            const geneTableHeaders = ["Gene ID", "Description", "Chromosome", "Start", "End"];
-            const geneTable = document.createElement('table');
-            const thead = document.createElement('thead');
-            const trHead = document.createElement('tr');
-            geneTableHeaders.forEach(h => {
-                const th = document.createElement('th');
-                th.textContent = h;
-                trHead.appendChild(th);
-            });
-            thead.appendChild(trHead);
-
-            const tbody = document.createElement('tbody');
-            const tr = document.createElement('tr');
-            [g.gene_id, g.description || "N/A", g.chr, g.start, g.end].forEach(v => {
-                const td = document.createElement('td');
-                td.textContent = v;
-                tr.appendChild(td);
-            });
-            tbody.appendChild(tr);
-
-            geneTable.appendChild(thead);
-            geneTable.appendChild(tbody);
-
+            // Gene 信息表
             resultsDiv.innerHTML = "";
-
             const h3Gene = document.createElement('h3');
             h3Gene.textContent = "Gene Information";
             resultsDiv.appendChild(h3Gene);
+
+            const geneTable = document.createElement('table');
+            geneTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Gene ID</th>
+                        <th>Description</th>
+                        <th>Chromosome</th>
+                        <th>Start</th>
+                        <th>End</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>${g.gene_id}</td>
+                        <td>${g.description || "N/A"}</td>
+                        <td>${g.chr}</td>
+                        <td>${g.start}</td>
+                        <td>${g.end}</td>
+                    </tr>
+                </tbody>
+            `;
             resultsDiv.appendChild(geneTable);
 
-            // 把基因区间填回 Chr/Start/End 输入框
+            // 把基因 chr 填到输入框，并根据 flanking 自动扩展 start/end
             document.getElementById('chr').value = g.chr;
-            document.getElementById('start').value = g.start;
-            document.getElementById('end').value = g.end;
+            updateSearchRange(g.start, g.end);
 
-            // ---- 甲基化窗口部分 ----
+            // Methylation windows
             const windows = data.windows || [];
-
             const h3Win = document.createElement('h3');
-            h3Win.textContent = "Methylation Windows Overlapping This Gene";
+            h3Win.textContent = "Methylation Windows Overlapping This Gene (with flanking)";
             resultsDiv.appendChild(h3Win);
 
             if (!windows.length) {
                 const p = document.createElement('p');
                 p.textContent = "No methylation windows found for this gene region.";
                 resultsDiv.appendChild(p);
+                downloadBtn.classList.add('hidden');
+                document.getElementById('pagination').classList.add('hidden');
                 return;
             }
 
-            const headers = ["chr", "start", "end", "strand", "context", "Leaf", "Root"];
-            const table = generateTable(windows, headers);
-            resultsDiv.appendChild(table);
+            tableData = windows;
+            currentPage = 1;
+            displayPage();
+            downloadBtn.classList.remove('hidden');
 
         } catch (e) {
             err.textContent = "Error: " + e.message;
@@ -298,9 +453,37 @@
         }
     }
 
-    // 回车键触发：
-    // 焦点在 Gene ID 且有内容 -> 查 Gene
-    // 否则 -> 查区间
+    function downloadTable() {
+        if (!tableData || !tableData.length) return;
+
+        const csvRows = [];
+        csvRows.push(headers.join(","));
+        tableData.forEach(row => {
+            const line = headers.map(h => {
+                let value = row[h];
+                if (typeof value === 'number') {
+                    if (['start', 'end'].includes(h)) {
+                        value = Math.round(value);
+                    } else {
+                        value = Number(value).toFixed(4);
+                    }
+                }
+                return value != null ? value : "";
+            }).join(",");
+            csvRows.push(line);
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "methylation_results.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // 回车键行为：在 Gene ID 里回车 -> 基因搜索；否则 -> 区间搜索
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
             const active = document.activeElement;
@@ -311,6 +494,18 @@
                 searchMethylation();
             }
         }
+    });
+
+    // flanking 选项改变时，如果已经有 start/end，就重新按照新 flanking 更新区间
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[name="flankingRegion"]').forEach(radio => {
+            radio.addEventListener('change', function () {
+                const start = document.getElementById('start').value;
+                const end = document.getElementById('end').value;
+                // 如果是从基因搜索过来的，start/end 会是基因±旧 flanking
+                // 这里简单地在重新搜索基因时会用新的 flanking，所以这里只更新 UI 不再复杂处理
+            });
+        });
     });
 </script>
 </body>
