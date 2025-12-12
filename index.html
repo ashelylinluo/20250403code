@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GrassBase - GO Enrichment Analysis</title>
+
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/datatables/1.10.21/css/dataTables.bootstrap4.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Poppins', sans-serif; background-color: #f8f9fa; color: #333; }
+    
+    .go-container { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+    .page-header { text-align: center; margin-bottom: 3rem; }
+    .page-title { color: #2e7d32; font-size: 2.8rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .page-subtitle { color: #666; font-size: 1.1rem; }
+
+    .analysis-form { background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); border: 1px solid #e9ecef; }
+    .form-label { font-weight: 600; color: #2e7d32; margin-bottom: 0.8rem; }
+    .form-control { border-radius: 8px; border: 1px solid #ced4da; padding: 10px; }
+    .form-control:focus { border-color: #2e7d32; box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.25); }
+    
+    .btn-primary { background-color: #2e7d32; border-color: #2e7d32; padding: 10px 30px; font-weight: 500; border-radius: 8px; transition: all 0.3s; }
+    .btn-primary:hover { background-color: #1b5e20; border-color: #1b5e20; transform: translateY(-1px); }
+    .btn-secondary { background-color: #6c757d; border-color: #6c757d; padding: 10px 20px; border-radius: 8px; }
+    
+    .btn-download {
+      background-color: white; color: #2e7d32; border: 1px solid #2e7d32;
+      padding: 8px 20px; border-radius: 6px; font-weight: 500; transition: all 0.3s;
+      margin-bottom: 15px; display: inline-block; cursor: pointer;
+    }
+    .btn-download:hover { background-color: #2e7d32; color: white; }
+
+    .results-section { margin-top: 3rem; display: none; }
+    .chart-wrapper { background: white; border-radius: 12px; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.05); height: 900px; } 
+    .chart-box { width: 100%; height: 100%; }
+
+    .table-wrapper { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+    #goTable thead th { background-color: #f1f3f5; border-bottom: 2px solid #dee2e6; color: #495057; font-weight: 600; }
+    .gene-preview { max-width: 150px; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+    .view-all-genes { color: #2e7d32; font-weight: 500; cursor: pointer; margin-left: 5px; font-size: 0.85rem; }
+    .view-all-genes:hover { text-decoration: underline; }
+
+    .loading-spinner { display: none; text-align: center; margin: 3rem 0; }
+    .error-message { color: #dc3545; display: none; text-align: center; margin: 1rem 0; font-weight: 500; background: #fff5f5; padding: 1rem; border-radius: 8px; }
+
+    .modal-gene-content { font-family: 'Consolas', monospace; white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #dee2e6; }
+  </style>
+</head>
+
+<body>
+
+  <div class="go-container">
+    <div class="page-header">
+      <h1 class="page-title">GrassBase Enrichment Analysis</h1>
+      <p class="page-subtitle">Gene Ontology (GO) analysis for <i>Cenchrus fungigraminus</i> (Juncao) & others</p>
+    </div>
+
+    <div class="analysis-form">
+      <form id="goForm">
+        <div class="form-group">
+          <label for="dataset" class="form-label">Select Species</label>
+          <select id="dataset" name="dataset" class="form-control" required>
+            <option value="" disabled selected>-- Select Grass Species --</option>
+            <option value="Cenchrus_fungigraminus">Cenchrus fungigraminus (巨菌草)</option>
+            <option value="Pennisetum_purpureum">Pennisetum purpureum (象草)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="geneList" class="form-label">Gene List (Gene IDs)</label>
+          <textarea id="geneList" name="geneList" class="form-control" rows="8" spellcheck="false" placeholder="Paste your gene IDs here (one per line)..."></textarea>
+          <small class="text-muted mt-2 d-block">Example format: Pgi01A00000020</small>
+        </div>
+
+        <div class="form-group text-right mt-4">
+          <button type="button" id="loadExample" class="btn btn-secondary mr-2">Load Example</button>
+          <button type="submit" class="btn btn-primary">Run Analysis</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="loading-spinner">
+      <div class="spinner-border text-success" style="width: 3rem; height: 3rem;" role="status">
+        <span class="sr-only">Loading...</span>
+      </div>
+      <p class="mt-3 text-success font-weight-bold">Running analysis via R... Please wait.</p>
+    </div>
+
+    <div class="error-message"></div>
+
+    <div class="results-section">
+      <div class="table-wrapper">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 style="color: #333; font-weight: 600;">Enrichment Table</h4>
+          <button id="downloadBtn" class="btn-download">Download all data (CSV)</button>
+        </div>
+        <div class="table-responsive">
+          <table id="goTable" class="table table-hover table-bordered" style="width:100%">
+            <thead>
+              <tr>
+                <th>Ontology</th>
+                <th>ID</th>
+                <th>Description</th>
+                <th>GeneRatio</th>
+                <th>pvalue</th>
+                <th>p.adjust</th>
+                <th>qvalue</th>
+                <th>Count</th>
+                <th>Genes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-lg-6">
+          <div class="chart-wrapper">
+            <div id="dotPlot" class="chart-box"></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="chart-wrapper">
+            <div id="barChart" class="chart-box"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="geneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title font-weight-bold">Associated Genes</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-gene-content" id="modalGeneList"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/datatables/1.10.21/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/datatables/1.10.21/js/dataTables.bootstrap4.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+
+  <script>
+    let currentAnalysisData = [];
+    let dataTable = null;
+    let dotChart = null;
+    let barChart = null;
+
+    $.fn.dataTable.ext.errMode = 'none';
+
+    $(document).ready(function() {
+      dotChart = echarts.init(document.getElementById('dotPlot'));
+      barChart = echarts.init(document.getElementById('barChart'));
+
+      $('#loadExample').click(function() {
+        const exampleGenes = `Pgi01A00000020\nPgi01A00000030\nPgi01A00000040\nPgi01A00000050\nPgi01A00000060\nPgi01A00000070\nPgi01A00000080\nPgi01A00000090\nPgi01A00000100`;
+        $('#geneList').val(exampleGenes);
+        $('#dataset').val('Cenchrus_fungigraminus');
+      });
+
+      $('#goForm').submit(function(e) {
+        e.preventDefault();
+        
+        const species = $('#dataset').val();
+        const geneList = $('#geneList').val();
+
+        if(!species || !geneList.trim()) {
+          alert("Please select a species and enter gene IDs.");
+          return;
+        }
+
+        $('.loading-spinner').show();
+        $('.results-section').hide();
+        $('.error-message').hide();
+
+        $.ajax({
+          url: '/flowerbase/go/enrich',
+          method: 'POST',
+          data: {
+            dataset: species,
+            geneList: geneList
+          },
+          success: function(data) {
+            $('.loading-spinner').hide();
+            
+            if (!data || data.length === 0 || (typeof data === 'object' && Object.keys(data).length === 0)) {
+              $('.error-message').html("No enrichment results found (pvalue > 0.05).<br>Try checking your gene IDs or using a larger gene list.").show();
+              return;
+            }
+            if (data.error) {
+              $('.error-message').text("Error: " + data.error).show();
+              return;
+            }
+
+            currentAnalysisData = data;
+            $('.results-section').fadeIn();
+            renderTable(data);
+            renderCharts(data);
+          },
+          error: function(xhr) {
+            $('.loading-spinner').hide();
+            let msg = "Unknown error occurred.";
+            if(xhr.responseJSON && xhr.responseJSON.error) {
+              msg = xhr.responseJSON.error;
+            } else if (xhr.responseText) {
+              msg = xhr.responseText;
+            }
+            $('.error-message').text("Analysis Failed: " + msg).show();
+            console.error(xhr);
+          }
+        });
+      });
+
+      $('#downloadBtn').click(function() {
+        if (!currentAnalysisData || currentAnalysisData.length === 0) return;
+        downloadCSV(currentAnalysisData, "GO_Enrichment_Results.csv");
+      });
+
+      window.addEventListener('resize', function() {
+        dotChart && dotChart.resize();
+        barChart && barChart.resize();
+      });
+    });
+
+    function renderTable(data) {
+      if (dataTable) {
+        dataTable.destroy();
+      }
+      dataTable = $('#goTable').DataTable({
+        data: data,
+        order: [[4, 'asc']],
+        pageLength: 10,
+        lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+        columns: [
+          { data: 'ONTOLOGY', width: '60px' },
+          { 
+            data: 'ID', 
+            width: '90px',
+            render: function(data) {
+              return `<a href="http://amigo.geneontology.org/amigo/term/${data}" target="_blank" style="color:#2e7d32; text-decoration:underline">${data}</a>`;
+            }
+          },
+          { data: 'Description' },
+          { data: 'GeneRatio', width: '70px' },
+          { data: 'pvalue', render: d => Number(d).toExponential(2) },
+          { data: 'p.adjust', render: d => Number(d).toExponential(2) },
+          { data: 'qvalue', render: d => d ? Number(d).toExponential(2) : '-' },
+          { data: 'Count', width: '50px' },
+          { 
+            data: 'geneID',
+            render: function(data) {
+              if (!data) return '';
+              const genes = data.split('/');
+              const preview = genes.slice(0, 2).join(', ');
+              const count = genes.length;
+              return `<span class="gene-preview">${preview}${count > 2 ? '...' : ''}</span>
+                      <span class="view-all-genes" onclick="showGenes(this)" data-genes="${data}">View</span>`;
+            }
+          }
+        ],
+        dom: "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+             "<'row'<'col-sm-12'tr>>" +
+             "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>"
+      });
+    }
+
+    window.showGenes = function(element) {
+      const geneString = $(element).attr('data-genes');
+      const formatted = geneString.split('/').join('\n');
+      $('#modalGeneList').text(formatted);
+      $('#geneModal').modal('show');
+    }
+
+    function downloadCSV(data, filename) {
+      if (!data || !data.length) return;
+      const headers = Object.keys(data[0]);
+      const csvRows = [];
+      csvRows.push(headers.join(','));
+      for (const row of data) {
+        const values = headers.map(header => {
+          let val = row[header] || '';
+          val = String(val).replace(/"/g, '""');
+          if (val.search(/("|,|\n)/g) >= 0) {
+            val = `"${val}"`;
+          }
+          return val;
+        });
+        csvRows.push(values.join(','));
+      }
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function renderCharts(data) {
+      // 1. 数据预处理
+      // 排序：P值小的排前面
+      let sortedData = data.slice().sort((a, b) => a.pvalue - b.pvalue);
+      // 为了在图表中把显著的显示在最上面，ECharts 默认是从下往上画的，所以我们需要 reverse
+      // 这里的逻辑：Pvalue最小（显著）的 -> 数组第一个 -> 应该在图表最顶端 -> ECharts Y轴 inverse: true
+      const topData = sortedData; 
+
+      const descriptions = topData.map(item => item.Description);
+      const counts = topData.map(item => item.Count);
+      const pvalues = topData.map(item => item.pvalue);
+      
+      const geneRatios = topData.map(item => {
+        if (!item.GeneRatio) return 0;
+        const parts = item.GeneRatio.split('/');
+        return (parseInt(parts[0]) / parseInt(parts[1])).toFixed(3);
+      });
+
+      // 2. 智能计算 DataZoom 的结束位置
+      // 我们希望初始只显示前 25 个，避免堆叠
+      const totalItems = topData.length;
+      let zoomEnd = 100;
+      if (totalItems > 25) {
+        // 如果有 100 个，显示 25 个就是 25%
+        zoomEnd = (25 / totalItems) * 100;
+      }
+
+      const gridConfig = {
+        left: '5%',     
+        right: '15%',    
+        bottom: '5%',
+        top: '12%',
+        containLabel: true 
+      };
+
+      const dataZoomConfig = [
+        {
+          type: 'slider',
+          show: true,
+          yAxisIndex: 0,
+          right: '5%',
+          width: 25,
+          start: 0,        // 从头开始
+          end: zoomEnd,    // 动态计算结束位置，防止堆叠！
+          handleSize: '100%',
+          borderColor: '#ddd',
+          fillerColor: 'rgba(46, 125, 50, 0.1)',
+          showDetail: false
+        },
+        {
+          type: 'inside',
+          yAxisIndex: 0,
+          zoomOnMouseWheel: false, 
+          moveOnMouseWheel: true
+        }
+      ];
+
+      // --- 气泡图配置 ---
+      const dotOption = {
+        title: { text: 'GO Enrichment Dotplot', left: 'center', textStyle: { fontSize: 18 } },
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          formatter: function(params) {
+            const i = params.dataIndex;
+            return `<div style="text-align:left">
+                      <strong>${topData[i].Description}</strong><br/>
+                      ID: ${topData[i].ID}<br/>
+                      p-value: ${topData[i].pvalue.toExponential(2)}<br/>
+                      GeneRatio: ${topData[i].GeneRatio}<br/>
+                      Count: ${topData[i].Count}
+                    </div>`;
+          }
+        },
+        grid: gridConfig,
+        dataZoom: dataZoomConfig,
+        xAxis: { 
+          type: 'value', 
+          name: 'GeneRatio', 
+          nameLocation: 'middle', 
+          nameGap: 30,
+          splitLine: { show: true, lineStyle: { type: 'dashed' } }
+        },
+        yAxis: { 
+          type: 'category', 
+          data: descriptions, 
+          inverse: true, // 【关键】反转 Y 轴，让排在数组前面的（显著的）显示在最上方
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { 
+            interval: 0, 
+            width: 220, 
+            overflow: 'break' 
+          } 
+        },
+        visualMap: {
+          orient: 'vertical', 
+          left: 'right', 
+          top: 'center',
+          min: 0, 
+          max: Math.max(...pvalues),
+          text: ['Low p-val', 'High p-val'], // 注意这里的标签
+          dimension: 3, 
+          // pvalue 越小越显著（红色），越大越不显著（蓝色）
+          inRange: { color: ['#d94e5d', '#eac736', '#50a3ba'] }, 
+          calculable: true
+        },
+        series: [{
+          type: 'scatter',
+          symbolSize: function(val) { return Math.min(Math.max(val[2] * 2, 10), 50); }, 
+          data: topData.map((item, index) => [
+            geneRatios[index], 
+            index,             
+            item.Count,        
+            item.pvalue        
+          ]),
+          itemStyle: { shadowBlur: 2, shadowColor: 'rgba(0,0,0,0.2)' }
+        }]
+      };
+
+      // --- 柱状图配置 ---
+      const barOption = {
+        title: { text: 'GO Enrichment BarPlot', left: 'center', textStyle: { fontSize: 18 } },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: gridConfig,
+        dataZoom: dataZoomConfig,
+        xAxis: { 
+          type: 'value', 
+          name: 'Gene Count',
+          nameLocation: 'middle', 
+          nameGap: 30
+        },
+        yAxis: { 
+          type: 'category', 
+          data: descriptions, 
+          inverse: true, // 【关键】反转 Y 轴
+          axisLabel: { 
+            interval: 0, 
+            width: 220, 
+            overflow: 'break' 
+          } 
+        },
+        series: [{
+          type: 'bar',
+          data: counts.map((count, i) => {
+            return {
+              value: count,
+              itemStyle: { color: '#2e7d32' }
+            };
+          }),
+          barMaxWidth: 20 // 柱子细一点，更精致
+        }]
+      };
+
+      dotChart.setOption(dotOption, true);
+      barChart.setOption(barOption, true);
+    }
+  </script>
+</body>
+</html>
